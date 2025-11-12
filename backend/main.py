@@ -1,11 +1,6 @@
-# Sales Summary API (FastAPI)
-# Автор: <Ваше Имя>, 2025-11-11
-#
-# Коротко по-человечески:
-# - Не генерирую «случайные» продажи. Беру jsonplaceholder и детерминированно
-#   превращаю посты в суммы: len(title)+len(body). Это стабильно и воспроизводимо.
-# - Асинхронный HTTP через aiohttp, расчёты — pandas.
-# - Дата-валидация и понятные ошибки. Диапазон ограничен 365 днями.
+# - Не генерирую «случайные» продажи. Беру jsonplaceholder и детерминированно превращаю посты в суммы: len(title)+len(body)
+# - Асинхронный хттп через aiohttp, расчёты в pandas
+# - Дата-валидация и понятные ошибки. диапазон ограничен 365 днями.
 
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import JSONResponse
@@ -19,14 +14,14 @@ app = FastAPI(title="Sales Summary API", description="Сводка продаж 
 DATE_FMT = "%Y-%m-%d"
 
 def parse_date(s: str) -> datetime:
-    """Парсинг даты YYYY-MM-DD с дружелюбной ошибкой."""
+    """Парсинг даты YYYY-MM-DD"""
     try:
         return datetime.strptime(s, DATE_FMT)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid date format: {s}. Expected YYYY-MM-DD")
 
 async def fetch_posts(session: aiohttp.ClientSession) -> list[dict]:
-    """Асинхронно тянем мок-данные. Если апстрим лег — поднимем осмысленный 502."""
+    """Асинхронно тянем мок-данные а если апстрим лег топоднимем 502"""
     url = "https://jsonplaceholder.typicode.com/posts"
     async with session.get(url, timeout=20) as resp:
         if resp.status != 200:
@@ -35,10 +30,10 @@ async def fetch_posts(session: aiohttp.ClientSession) -> list[dict]:
         return await resp.json()
 
 def synthesize_daily_sales(posts: list[dict], start: datetime, end: datetime) -> pd.DataFrame:
-    """Делаем воспроизводимые 'продажи' по дням из постов.
-    - список дней = от start до end,
+    """Делаем воспроизводимые продажи по дням из постов
+    - список дней = от start до end
     - сумма по посту = len(title)+len(body),
-    - раскладываем посты по дням циклически.
+    - раскладываем посты по дням циклически
     """
     if end < start:
         raise HTTPException(status_code=400, detail="end_date must be >= start_date")
@@ -71,7 +66,7 @@ async def get_sales_summary(
     start = parse_date(start_date)
     end = parse_date(end_date)
 
-    # Предохранитель на длину диапазона.
+    # Предохранитель на длину диапазона
     if (end - start).days > 365:
         raise HTTPException(status_code=400, detail="Date range too large. Max 365 days.")
 
@@ -80,7 +75,7 @@ async def get_sales_summary(
             posts = await fetch_posts(session)
 
         df = synthesize_daily_sales(posts, start, end)
-        # min_periods=1 — чтобы первые 1-2 дня не были NaN
+        # min_periods=1 — чтобы первые 1-2 дня не были нан
         df["rolling_avg_3"] = df["sales"].rolling(window=3, min_periods=1).mean()
 
         top5 = df.nlargest(5, "sales").copy()

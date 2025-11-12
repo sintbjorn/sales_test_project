@@ -19,8 +19,8 @@
 </head>
 <body>
   <h1>Sales Dashboard</h1>
-  <!-- Небольшая заметка «по-человечески»:
-       Я сделал интерфейс минималистичным — только то, что нужно тесту,
+  <!-- Небольшая заметка:
+       Я сделал интерфейс минималистичным и запихнул только то, что нужно тесту,
        без излишеств. Сортировка — кликом по заголовку. -->
 
   <div class="row">
@@ -59,7 +59,7 @@
   </table>
 
 <script>
-// Если API переехал — поправьте сюда
+// Если API переехал — правим сюда
 const API_BASE = ""; // proxy via /api
 
 const startEl = document.getElementById('start_date');
@@ -177,7 +177,7 @@ async function loadData() {
 
 loadBtn.addEventListener('click', loadData);
 
-// Значения по умолчанию: последние 14 дней
+// Значения по умолчанию-последние 14 дней
 const today = new Date();
 const start = new Date(today); start.setDate(today.getDate() - 13);
 startEl.value = start.toISOString().slice(0,10);
