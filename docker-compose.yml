@@ -1,0 +1,42 @@
+version: "3.9"
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: sales_backend
+    expose:
+      - "8000"
+    restart: unless-stopped
+    networks:
+      - sales_net
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: sales_frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - sales_net
+
+  db:
+    image: postgres:16
+    container_name: sales_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: example
+      POSTGRES_DB: salesdb
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"   # чтобы пускать psql/GUI с хоста
+    restart: unless-stopped
+    networks:
+      - sales_net
+
+networks:
+  sales_net:
+    driver: bridge

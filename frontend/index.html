@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Sales Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 20px auto; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    input { padding: 6px 8px; }
+    button { padding: 8px 12px; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; margin-top: 16px; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    th { cursor: pointer; user-select: none; }
+    .error { color: #c00; margin-top: 10px; }
+    .hidden { display: none; }
+    .muted { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Sales Dashboard</h1>
+  <!-- Небольшая заметка «по-человечески»:
+       Я сделал интерфейс минималистичным — только то, что нужно тесту,
+       без излишеств. Сортировка — кликом по заголовку. -->
+
+  <div class="row">
+    <label>Start date: <input type="date" id="start_date"></label>
+    <label>End date: <input type="date" id="end_date"></label>
+    <button id="loadBtn">Получить данные</button>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <div class="error hidden" id="errorBox"></div>
+
+  <h2>График продаж по дням</h2>
+  <canvas id="salesChart" height="100"></canvas>
+
+  <h2>Дневные продажи</h2>
+  <table id="salesTable">
+    <thead>
+      <tr>
+        <th data-key="date">Дата</th>
+        <th data-key="sales">Продажи</th>
+        <th data-key="rolling_avg_3">Скользящее ср. (3)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Топ-5 дней</h2>
+  <table id="topTable">
+    <thead>
+      <tr>
+        <th data-key="date">Дата</th>
+        <th data-key="sales">Продажи</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+<script>
+// Если API переехал — поправьте сюда
+const API_BASE = ""; // proxy via /api
+
+const startEl = document.getElementById('start_date');
+const endEl = document.getElementById('end_date');
+const loadBtn = document.getElementById('loadBtn');
+const errorBox = document.getElementById('errorBox');
+const statusEl = document.getElementById('status');
+
+let salesChart;
+
+function showError(msg) {
+  errorBox.textContent = msg;
+  errorBox.classList.remove('hidden');
+}
+function clearError() {
+  errorBox.textContent = "";
+  errorBox.classList.add('hidden');
+}
+
+function renderTable(tableId, rows, columns) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = "";
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    columns.forEach(c => {
+      const td = document.createElement('td');
+      td.textContent = r[c];
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+function makeSortable(tableId, rowsRef, columns) {
+  const thead = document.querySelector(`#${tableId} thead`);
+  let sortKey = null;
+  let asc = true;
+  thead.addEventListener('click', (e) => {
+    const th = e.target.closest('th');
+    if (!th) return;
+    const key = th.dataset.key;
+    if (!key) return;
+    if (sortKey === key) asc = !asc; else { sortKey = key; asc = true; }
+    rowsRef.sort((a, b) => {
+      const va = a[sortKey], vb = b[sortKey];
+      if (!isNaN(Number(va)) && !isNaN(Number(vb))) {
+        return asc ? (va - vb) : (vb - va);
+      }
+      return asc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    });
+    renderTable(tableId, rowsRef, columns);
+  });
+}
+
+async function loadData() {
+  clearError();
+  const start = startEl.value;
+  const end = endEl.value;
+  if (!start || !end) {
+    showError("Укажите обе даты");
+    return;
+  }
+  statusEl.textContent = "Загрузка...";
+
+  try {
+    const url = new URL((API_BASE || "") + "/api/sales/summary", window.location.origin);
+    url.searchParams.set("start_date", start);
+    url.searchParams.set("end_date", end);
+
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+
+    // Таблицы
+    const daily = data.daily || [];
+    const top5 = data.top5_days || [];
+    const dailyColumns = ["date", "sales", "rolling_avg_3"];
+    renderTable("salesTable", daily, dailyColumns);
+    renderTable("topTable", top5, ["date", "sales"]);
+    makeSortable("salesTable", daily, dailyColumns);
+    makeSortable("topTable", top5, ["date", "sales"]);
+
+    // График
+    const labels = daily.map(d => d.date);
+    const sales = daily.map(d => d.sales);
+    const rolling = daily.map(d => d.rolling_avg_3);
+
+    if (salesChart) salesChart.destroy();
+    const ctx = document.getElementById('salesChart').getContext('2d');
+    salesChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Sales', data: sales },
+          { label: 'Rolling Avg (3)', data: rolling }
+        ]
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+
+    statusEl.textContent = `Готово. Всего продаж: ${data.summary?.total_sales ?? 0}`;
+  } catch (e) {
+    showError(`Ошибка: ${e.message}`);
+    statusEl.textContent = "";
+  }
+}
+
+loadBtn.addEventListener('click', loadData);
+
+// Значения по умолчанию: последние 14 дней
+const today = new Date();
+const start = new Date(today); start.setDate(today.getDate() - 13);
+startEl.value = start.toISOString().slice(0,10);
+endEl.value = today.toISOString().slice(0,10);
+</script>
+</body>
+</html>
